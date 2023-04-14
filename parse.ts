@@ -9,7 +9,8 @@ interface RegexValidator {
     | "constructor"
     | "dependency"
     | "conditional-flow"
-    | "generic-statement";
+    | "generic-statement"
+    | "switch-case-validator";
 }
 
 const primitiveTypes = new RegExp(
@@ -27,6 +28,11 @@ const methodValidators: RegexValidator[] = [
     validator: /^(return|break|continue)$/,
     name: "generic-statement",
   },
+  {
+    validator: /(^switch$|^case$|^default)$/,
+    name: "switch-case-validator"
+
+  }
   // add validators for more control flow statements, and other constructs you can think of
 ];
 
@@ -263,7 +269,7 @@ const parseMethodBody = (
 
             idx += 1;
           }
-        } else if (validators[i].name === "generic-statement") {
+        }  else if (validators[i].name === "generic-statement") {
           switch (contentArr[idx]) {
             case "return": {
               const openingBackTick = idx + 1;
@@ -274,19 +280,88 @@ const parseMethodBody = (
                 closingBackTick + 1
               );
               let output = fullReturnStatement.join("").replace(/this./, "");
-              createTestCase(
-                assertionSubject,
-                assertionValue.slice(1, -1),
-                comparisonOperand,
-                dependencyGraph[className],
-                output
-              );
+              
+              if(output.includes(`$`)){
+                createTestCase(
+                  assertionSubject,
+                  assertionValue.slice(1, -1),
+                  comparisonOperand,
+                  dependencyGraph[className],
+                  output,
+                  "if-else"
+                );
+              }
+              
+              
               idx = closingBackTick + 1;
             }
             default:
               break;
           }
-        }
+        }else if (validators[i].name === "switch-case-validator"){
+          console.log(`\n================================================`);
+          console.log(`\tMethod construct: ${validators[i].name}`);
+          console.log(`================================================`);
+          if (contentArr[idx] === "switch") {
+           let closingParenthesis = contentArr.indexOf(")",idx);
+           let openingCurlyBracket = contentArr.indexOf("{",closingParenthesis);
+
+            let switchExpression  = contentArr.slice(
+              idx +2,
+              closingParenthesis
+            );
+            
+            let switchSubject = switchExpression[0].replace(/this./,"")
+            
+            let defaultfound = false
+
+            for(let i=openingCurlyBracket;i<contentArr.length;i++){
+              if(contentArr[i]=='case'){
+                let breakstatementindex = contentArr.indexOf("break;",i)
+                
+                let casestring = ""
+                for(let statement = i+1; statement<breakstatementindex;statement++){
+                  casestring = casestring + contentArr[statement]
+                }
+                
+                let switchassertionValue =  casestring.split(":")[0].replace(/['‘’"“”]/g, '', );
+                let output = casestring.split("=")[1].replace(';',"").replace(/this./, "")
+
+                createTestCase(
+                switchSubject,//swtichcasecondition 'breed'
+                switchassertionValue,// switchcasevalue 'cavapoo','canine'
+                "",//No Comparision Operator Required for SwitchCase
+                dependencyGraph[className],
+                output,
+                "switch-case"
+              );
+                
+              }else if(contentArr[i]=='default'){
+                if(!defaultfound){
+                  defaultfound = true
+                  let dbreakstatementindex = contentArr.indexOf("break;",i)
+                  let defaultstring = ""
+                  for(let statement = i+2;statement<dbreakstatementindex;statement++){
+                    defaultstring = defaultstring + contentArr[statement]
+                  }
+                  let defaultcaseSubject = "default"
+                  let output = defaultstring.split("=")[1].replace(';',"").replace(/this./, "")
+
+                  createTestCase(
+                  switchSubject,//swtichcasecondition 'breed'
+                  defaultcaseSubject,// 'default' as value
+                  "",//No Comparision Operator Required for SwitchCase
+                  dependencyGraph[className],
+                  output,
+                  "switch-case"
+                  )
+                }
+               
+              }
+            }
+
+          }
+        } 
         break;
       }
     }
@@ -298,12 +373,15 @@ const createTestCase = (
   assertionValue: any,
   comparisonOperand: string,
   entity: ClassFormat,
-  output: any
+  output: any,
+  typeflow : String
 ) => {
-  const methodInput = entity.method.parameters
+
+ if(typeflow === "if-else"){
+    const methodInput = entity.method.parameters 
     .map((parameter) => parameter.name)
     .join(",");
-  const attributes = entity.attributes
+    const attributes = entity.attributes
     .map((attribute) => {
       if (assertionSubject === attribute.name && comparisonOperand === "===") {
         return `'${assertionValue}'`;
@@ -312,14 +390,55 @@ const createTestCase = (
     })
     .join(",");
 
-  let { verb1, verb2 } = operandToString(comparisonOperand);
+    let { verb1, verb2 } = operandToString(comparisonOperand);
 
-  testCases.push(`\ttest('ensure ${entity.method.name} method ${verb1} a ${assertionValue} related value if ${assertionSubject} ${verb2} ${assertionValue}', async () => {
+    testCases.push(`\ttest('ensure ${entity.method.name} method ${verb1} a ${assertionValue} related value if ${assertionSubject} ${verb2} ${assertionValue}', async () => {
     const { sut } = makeSut(${attributes})
     let result = sut.${entity.method.name}(${methodInput})
 
     expect(result).toBe(${output})
-  })\n\n`);
+    })\n\n`);
+ 
+  }else if(typeflow === "switch-case"){
+
+  const methodInput = entity.method.parameters 
+    .map((parameter) => parameter.name)
+    .join(",");
+
+
+    const attributes = entity.attributes
+    
+    .map((attribute) => {
+      if (assertionSubject === attribute.name && assertionValue == "default"){
+        return `'dummyrandomvalue'`;
+      }else if(assertionSubject== attribute.name ){
+        return `'${assertionValue}'`;
+      }
+
+      return attribute.name;
+    })
+    .join(",");
+    //should return expected string when breed is cavapoo'
+    if(assertionValue=="default"){
+      let unusedvar = "+`${"+`${assertionSubject}`+"}`"
+      testCases.push(`\ttest('ensure ${entity.method.name} method returns a ${assertionValue} related value if ${assertionSubject} value is '${unusedvar}, async () => {
+        const { sut } = makeSut(${attributes})
+        let result = sut.${entity.method.name}(${methodInput})
+        
+        expect(result).toBe(${output})
+        })\n\n`);
+
+    }else{
+      testCases.push(`\ttest('ensure ${entity.method.name} method returns a ${assertionValue} related value if ${assertionSubject} value is ${assertionValue}', async () => {
+        const { sut } = makeSut(${attributes})
+        let result = sut.${entity.method.name}(${methodInput})
+        
+        expect(result).toBe(${output})
+        })\n\n`);
+    }
+
+    
+ }
 };
 
 const createTestFile = (className: string, entity: ClassFormat) => {
