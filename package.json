@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "ts-node index.ts",
-    "test": "jest --passWithNoTests --no-cache --runInBand"
+    "test": "jest --passWithNoTests --no-cache --runInBand",
+    "testingpets":"jest expected.ts"
   },
   "keywords": [],
   "author": "",

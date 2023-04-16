@@ -1,8 +1,18 @@
 export class Pet {
-  constructor( private name:string, private breed: string) {}
+  constructor( private name:string, private breed: string) { 
+  }
 
-  cry(sound:string):   string {    
+  cry(sound:string):string {
+    if (this.breed === 'cavapoo') {
+      return `${this.name}says:${sound}!`
+    } else {
+      return `${this.name}says:${sound}raaar!`
+    }
+  }
+
+  intro(sound:string):string {
     let crySound = '';
+    
     switch (this.breed) {
       case 'cavapoo':
         crySound = `${this.name}says:${sound}!`;
@@ -22,7 +32,5 @@ export class Pet {
     }
 
     return crySound;
-    
   }
-
 }
